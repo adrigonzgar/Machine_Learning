@@ -97,7 +97,7 @@ running = True
 
 while running:
     # ⚠️ Si la ventana ya se cerró, salimos sin romper nada
-    if env.window is None:
+    if env.unwrapped.window is None:
         break
 
     try:

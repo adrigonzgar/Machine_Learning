@@ -10,13 +10,15 @@ from map_loader import prepare_for_env
 import numpy as np
 
 # Cargar el mapa desde el archivo
-
+MAP = [] 
 
 class CustomTaxiEnv(TaxiEnv):
     def __init__(self, render_mode=None):
-        super().__init__(render_mode=render_mode)
         desc_list = [[char.encode() for char in row] for row in MAP]
-        self.desc = np.array(desc_list)
+        desc_array = np.array(desc_list)
+
+        super().__init__(render_mode=render_mode, desc=desc_array)
+
 
 # Registrar el entorno con un ID nuevo
 register(
@@ -24,5 +26,3 @@ register(
     entry_point="registry:CustomTaxiEnv",
     max_episode_steps=200
 )
-
-
