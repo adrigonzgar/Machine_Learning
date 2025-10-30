@@ -36,17 +36,28 @@ clock = pygame.time.Clock()
 locs = [(0,0),(0,4),(4,0),(4,3)]  # posiciones R,G,Y,B
 
 def decode_state(state):
-    taxi_row = state // 25
-    taxi_col = (state % 25) // 5
-    pass_loc = (state % 25) % 5
-    dest_idx = (state % 25) % 4
+    # La codificación correcta es: (((taxi_row * 5 + taxi_col) * 5) + pass_loc) * 4 + dest_idx
+    
+    dest_idx = state % 4
+    state = state // 4
+    
+    pass_loc = state % 5
+    state = state // 5
+    
+    taxi_col = state % 5
+    state = state // 5
+    
+    taxi_row = state % 5 # state debería ser 0..4 aquí
+    
+    # Obtener coordenadas de los índices
     dest_row, dest_col = locs[dest_idx]
     if pass_loc < 4:
         pass_row, pass_col = locs[pass_loc]
         in_taxi = 0
     else:
-        pass_row, pass_col = -1, -1
+        pass_row, pass_col = -1, -1 # El pasajero está en el taxi
         in_taxi = 1
+    
     return {
         "taxi_r": taxi_row,
         "taxi_c": taxi_col,
