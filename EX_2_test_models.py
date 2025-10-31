@@ -1,127 +1,117 @@
-#####################################
-#      EX_2_test_models.py          #
-#                                   #
-#  Prueba los mejores modelos de CV  #
-#     contra el set de TEST         #
-#####################################
-
 import pandas as pd
-import numpy as np
 import os
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score
+import warnings
+
+# Suprimir warnings
+warnings.filterwarnings("ignore")
+
+print("--- Iniciando Prueba de Modelos en Set de Test (EJ 2.3) ---")
 
 # --- Configuración ---
 DATA_DIR = "data/processed"
 RESULTS_DIR = "results"
 CV_RESULTS_FILE = os.path.join(RESULTS_DIR, "cv_results_table.csv")
 
-# ---------------------
-# Lista para guardar los resultados finales del TEST
-test_results = []
+datasets = ["original", "new_features", "kbest", "rfe"]
+results = []
 
-print("--- Iniciando Ejercicio 2 (Parte 2): Prueba en Set de Test ---")
-
-# --- 1. Cargar la tabla de resultados de CV ---
+# --- 1. Leer la tabla de CV para encontrar a los "campeones" ---
 try:
-    df_cv_results = pd.read_csv(CV_RESULTS_FILE)
+    # --- ¡ARREGLO CLAVE! Leer con COMA (por defecto) ---
+    df_cv = pd.read_csv(CV_RESULTS_FILE)
 except FileNotFoundError:
-    print(f"❌ ¡ERROR! No se encontró el archivo: {CV_RESULTS_FILE}")
-    print("Asegúrate de haber ejecutado 'EX_2_cross_validation.py' primero.")
+    print(f"❌ ¡ERROR! No se encuentra el archivo {CV_RESULTS_FILE}")
+    print("Por favor, ejecuta 'EX_2_cross_validation.py' primero.")
     exit()
 
-print(f"✅ Tabla de resultados de CV cargada desde '{CV_RESULTS_FILE}'")
+print(f"✅ Leída la tabla de resultados de {CV_RESULTS_FILE}")
 
-# --- 2. Encontrar el MEJOR 'max_depth' para CADA dataset ---
-# Agrupamos por 'dataset' y nos quedamos con la fila (idx)
-# que tiene el máximo 'cv_accuracy'
-best_models_idx = df_cv_results.groupby('dataset')['cv_accuracy'].idxmax()
-best_models_config = df_cv_results.loc[best_models_idx]
+# Asegurarse de que las columnas numéricas son leídas como números
+df_cv['mean_accuracy'] = pd.to_numeric(df_cv['mean_accuracy'])
 
-print("\n--- 🏆 Los 4 Modelos 'Campeones' (mejor CV Accuracy) son: ---")
-print(best_models_config)
-print("----------------------------------------------------------\n")
+champion_models = {}
+for name in datasets:
+    df_dataset = df_cv[df_cv['dataset'] == name]
+    if df_dataset.empty:
+        print(f"⚠️ No hay datos de CV para {name}. Saltando.")
+        continue
+    best_row = df_dataset.loc[df_dataset['mean_accuracy'].idxmax()]
+    champion_models[name] = best_row['max_depth']
 
-# --- 3. Bucle: Entrenar y Probar cada uno de los 4 "Campeones" ---
-for index, config in best_models_config.iterrows():
-    
-    dataset_name = config['dataset']
-    # Convertir 'Sin Límite' (texto) de nuevo a None (para el modelo)
-    if config['max_depth'] == 'Sin Límite':
-        best_depth = None
-    else:
-        best_depth = int(config['max_depth'])
-        
-    print(f"🔬 Probando Campeón: Dataset='{dataset_name}', max_depth={config['max_depth']}")
-    
-    # --- 4. Cargar los datos de TRAIN y TEST para este dataset ---
-    train_file = os.path.join(DATA_DIR, f"data_{dataset_name}_TRAIN.csv")
-    test_file = os.path.join(DATA_DIR, f"data_{dataset_name}_TEST.csv")
+print("\n🏆 'Campeones' elegidos (mejor max_depth de cada dataset):")
+print(champion_models)
+
+# --- 2. Entrenar y Probar los 4 campeones ---
+for name, depth in champion_models.items():
+    print(f"\n--- Probando Campeón: '{name}' (depth={depth}) ---")
     
     try:
-        df_train = pd.read_csv(train_file)
-        df_test = pd.read_csv(test_file)
+        # --- ¡ARREGLO CLAVE! Leer con COMA (por defecto) ---
+        df_train = pd.read_csv(os.path.join(DATA_DIR, f"data_{name}_TRAIN.csv"))
+        df_test = pd.read_csv(os.path.join(DATA_DIR, f"data_{name}_TEST.csv"))
     except FileNotFoundError:
-        print(f"  ❌ ¡ERROR! No se encontraron los archivos para '{dataset_name}'")
+        print(f"⚠️ ¡Aviso! No se encontraron archivos para '{name}'. Saltando...")
+        continue
+    except pd.errors.EmptyDataError:
+        print(f"⚠️ ¡Aviso! Archivos de datos para '{name}' están vacíos.")
         continue
 
-    # --- 5. Preparar datos (X, y) ---
-    # Quitamos 'map_name' si existe
+    # Preparar datos
     if 'map_name' in df_train.columns:
         df_train = df_train.drop(columns=['map_name'])
     if 'map_name' in df_test.columns:
         df_test = df_test.drop(columns=['map_name'])
-        
+    
+    if df_train.empty or df_test.empty:
+        print(f"⚠️ ¡Aviso! Datos vacíos para '{name}' después de procesar.")
+        continue
+
     X_train = df_train.drop(columns=['action'])
     y_train = df_train['action']
     X_test = df_test.drop(columns=['action'])
     y_test = df_test['action']
 
-    # --- 6. Entrenar el modelo "Campeón" ---
-    # Lo entrenamos con su 'best_depth' y con TODOS los datos de TRAIN
-    model = DecisionTreeClassifier(max_depth=best_depth, random_state=42)
-    model.fit(X_train, y_train)
-    print("  > Modelo entrenado con datos de TRAIN.")
+    # Crear y Entrenar el modelo
+    model_depth = None if (str(depth) == "None" or pd.isna(depth)) else int(float(depth))
     
-    # --- 7. Probar el modelo en el set de TEST ---
+    model = DecisionTreeClassifier(max_depth=model_depth, random_state=42)
+    model.fit(X_train, y_train)
+
+    # Predecir en TEST
     y_pred = model.predict(X_test)
-    print("  > Modelo probado con datos de TEST.")
 
-    # --- 8. Calcular Métricas de TEST (ML Performance) ---
-    test_accuracy = accuracy_score(y_test, y_pred)
-    test_precision = precision_score(y_test, y_pred, average='macro', zero_division=0)
-    test_recall = recall_score(y_test, y_pred, average='macro', zero_division=0)
+    # Calcular métricas
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted')
+    recall = recall_score(y_test, y_pred, average='weighted')
+    
+    print(f"  Accuracy en Test: {accuracy:.4f}")
+    print(f"  Precision en Test: {precision:.4f}")
+    print(f"  Recall en Test: {recall:.4f}")
 
-    print(f"    > Resultados en TEST:")
-    print(f"    > Accuracy:   {test_accuracy:.4f}")
-    print(f"    > Precision:  {test_precision:.4f}")
-    print(f"    > Recall:     {test_recall:.4f}\n")
-
-    # Guardar estos resultados
-    test_results.append({
-        "dataset": dataset_name,
-        "max_depth": config['max_depth'],
-        "test_accuracy": test_accuracy,
-        "test_precision": test_precision,
-        "test_recall": test_recall
+    results.append({
+        "dataset": name,
+        "max_depth": depth,
+        "test_accuracy": accuracy,
+        "test_precision": precision,
+        "test_recall": recall
     })
 
-print("=======================================================")
-print("✅ ¡Pruebas en Test completadas!")
-print("=======================================================")
-
-# --- 9. Guardar la tabla de resultados de TEST ---
-if test_results:
-    df_test_results = pd.DataFrame(test_results)
-    df_test_results = df_test_results.sort_values(by="test_accuracy", ascending=False)
-    
-    results_file = os.path.join(RESULTS_DIR, "test_results_table.csv")
-    df_test_results.to_csv(results_file, index=False)
-    
-    print(f"🏆 Tabla de resultados de TEST guardada en: {results_file}")
-    print("\n--- MEJORES MODELOS (según Test Accuracy) ---")
-    print(df_test_results.head())
+# --- 3. Guardar la tabla final de resultados de Test ---
+if not results:
+    print("\n❌ ¡ERROR! No se generaron resultados de test.")
 else:
-    print("⚠️ No se generaron resultados de test.")
+    df_results = pd.DataFrame(results)
+    df_results = df_results.sort_values(by="test_accuracy", ascending=False)
+    output_path = os.path.join(RESULTS_DIR, "test_results_table.csv")
 
-print("\n--- Fin del Ejercicio 2 (Parte 2) ---")
+    # --- ¡ARREGLO CLAVE! Guardar con COMA (por defecto) ---
+    df_results.to_csv(output_path, index=False)
+
+    print("\n--- ¡Prueba completada! ---")
+    print(f"✅ Tabla de resultados de Test guardada en: {output_path}")
+    print("\nContenido de la tabla:")
+    print(df_results)
+
