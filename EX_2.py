@@ -15,6 +15,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
+import joblib
 
 # Set random seed
 np.random.seed(42)
@@ -127,6 +128,9 @@ def main():
 
     # Train model and evaluate
     model, y_pred, metrics = train_and_evaluate(X_train, y_train, X_test, y_test)
+
+    joblib.dump(model, "linear_regression_model.joblib")
+    print("✅ Saved Linear Regression model to linear_regression_model.joblib")
 
     # Save results
     results_df = pd.DataFrame({

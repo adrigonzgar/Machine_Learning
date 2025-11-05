@@ -17,6 +17,8 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 
+import joblib
+
 # Set random seed for reproducibility
 np.random.seed(42)
 
@@ -126,6 +128,8 @@ def main():
     # Train and evaluate on full training data
     model, y_pred, metrics = train_and_evaluate(X_train, y_train, X_test, y_test, **best_params)
 
+    joblib.dump(model, "decision_tree_model.joblib")
+    print("✅ Saved tuned Decision Tree model to decision_tree_model.joblib")
     # ============================================================
     # Quantitative comparison with CV metrics (from Exercise 1.2)
     # ============================================================
@@ -166,3 +170,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    
