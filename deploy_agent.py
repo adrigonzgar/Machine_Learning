@@ -1,3 +1,4 @@
+from pickle import TRUE
 import gymnasium as gym
 import pygame
 import joblib
@@ -132,14 +133,26 @@ FEATURES_RFE = [
 # 🚀 3. Función principal de despliegue
 # =====================================================
 
-def run_simulation(model_path, map_file):
+def run_simulation(model_path, map_file, headless=False):
+    """
+    Ejecuta una simulación del agente en un mapa.
+    
+    Args:
+        model_path: Ruta al modelo .joblib
+        map_file: Nombre del archivo del mapa en la carpeta maps/
+        headless: Si True, no muestra la ventana de Pygame (útil para modo automático)
+    
+    Returns:
+        int: Número de pasos si el agente resuelve el mapa correctamente
+        None: Si el agente falla o se trunca el episodio
+    """
     
     # --- Cargar Modelo ---
     try:
         model = joblib.load(model_path)
     except FileNotFoundError:
         print(f"❌ Error: No se encontró el modelo {model_path}")
-        return
+        return None
     
     # --- Cargar Mapa ---
     try:
@@ -147,26 +160,30 @@ def run_simulation(model_path, map_file):
         registry.MAP = prepare_for_env(map_path)
     except FileNotFoundError:
         print(f"❌ Error: No se encontró el mapa {map_file} en la carpeta 'maps/'")
-        return
+        return None
 
     # --- Determinar qué features usar ---
     if "original" in model_path:
         feature_list = FEATURES_ORIGINAL
-        print("🧠 Usando features: ORIGINALES")
+        if not headless:
+            print("🧠 Usando features: ORIGINALES")
     elif "rfe" in model_path:
         feature_list = FEATURES_RFE
-        print("🧠 Usando features: RFE")
+        if not headless:
+            print("🧠 Usando features: RFE")
     elif "new_features" in model_path:
         feature_list = FEATURES_NEW
-        print("🧠 Usando features: NEW_FEATURES")
+        if not headless:
+            print("🧠 Usando features: NEW_FEATURES")
     else:
         print(f"❌ Error: No se reconoce el tipo de modelo '{model_path}'")
-        return
+        return None
 
     # --- Crear Entorno ---
-    env = gym.make("Taxi-Custom-v1", render_mode="human")
+    render_mode = "human" if not headless else "rgb_array"  # rgb_array no abre ventanas
+    env = gym.make("Taxi-Custom-v1", render_mode=render_mode)
     obs, info = env.reset()
-    clock = pygame.time.Clock()
+    clock = pygame.time.Clock() if not headless else None
     
     done = False
     truncated = False
@@ -200,11 +217,13 @@ def run_simulation(model_path, map_file):
             # 6. Limitar los pasos
             if total_steps >= max_steps:
                 truncated = True
-                print(f"Límite de {max_steps} pasos alcanzado.")
+                if not headless:
+                    print(f"Límite de {max_steps} pasos alcanzado.")
 
             # 7. Renderizar (y ralentizar para que se pueda ver)
-            env.render()
-            clock.tick(10) # 10 frames por segundo
+            if not headless:
+                env.render()
+                clock.tick(10) # 10 frames por segundo
 
         except Exception as e:
             print(f"\n❌ ¡ERROR DURANTE LA SIMULACIÓN! ❌")
@@ -216,19 +235,26 @@ def run_simulation(model_path, map_file):
 
 
     # --- Reporte Final ---
-    print("\n--- ¡Simulación Terminada! ---")
-    if done and not truncated:
-        print(f"✅✅ ÉXITO ✅✅")
-        print(f"Mapa '{map_file}' resuelto en {total_steps} pasos.")
-    else:
-        print(f"❌❌ FRACASO ❌❌")
-        if truncated:
-             print(f"El agente no resolvió el mapa. Límite de {max_steps} pasos alcanzado o error.")
+    if not headless:
+        print("\n--- ¡Simulación Terminada! ---")
+        if done and not truncated:
+            print(f"✅✅ ÉXITO ✅✅")
+            print(f"Mapa '{map_file}' resuelto en {total_steps} pasos.")
         else:
-             print(f"El agente falló por otra razón.")
+            print(f"❌❌ FRACASO ❌❌")
+            if truncated:
+                 print(f"El agente no resolvió el mapa. Límite de {max_steps} pasos alcanzado o error.")
+            else:
+                 print(f"El agente falló por otra razón.")
+    
+    result = total_steps if (done and not truncated) else None
     
     env.close()
-    print("---------------------------------")
+    
+    if not headless:
+        print("---------------------------------")
+    
+    return result
 
 
 # =====================================================
@@ -236,46 +262,136 @@ def run_simulation(model_path, map_file):
 # =====================================================
 if __name__ == "__main__":
     
-    # --- Seleccionar Modelo ---
-    print("🤖 Modelos disponibles para desplegar:")
-    models_dir = "models"
-    available_models = [f for f in os.listdir(models_dir) if f.endswith(".joblib")]
+    # ===========================================
+    # 🎛️ MODO AUTOMÁTICO (Ejercicio 3)
+    # ===========================================
+    AUTO_MODE = True  # Cambiar a True para activar modo automático
     
-    # Filtrar solo los 3 que nos interesan
-    final_models = [m for m in available_models if "original" in m or "rfe" in m or "new_features" in m]
-    
-    if not final_models:
-        print(f"❌ Error: No se encontraron modelos en la carpeta '{models_dir}'")
-        print("Asegúrate de haber ejecutado 'train_final_models.py' del Ejercicio 2.")
-        exit()
+    if AUTO_MODE:
+        print("🚀 MODO AUTOMÁTICO ACTIVADO")
+        print("="*60)
+        
+        # Definir los 3 modelos finales
+        model_files = [
+            "model_original_depth_10.joblib",
+            "model_new_features_depth_10.joblib",
+            "model_rfe_depth_10.joblib"
+        ]
+        
+        # Obtener todos los mapas
+        maps_dir = "maps"
+        available_maps = [f for f in os.listdir(maps_dir) if f.endswith(".txt")]
+        available_maps.sort()  # Ordenar para consistencia
+        
+        print(f"\n📊 Ejecutando {len(model_files)} modelos en {len(available_maps)} mapas...")
+        print(f"Total de simulaciones: {len(model_files) * len(available_maps)}")
+        print("="*60)
+        
+        # Lista para almacenar resultados
+        results = []
+        
+        # Ejecutar cada modelo en cada mapa
+        for model_file in model_files:
+            model_path = os.path.join("models", model_file)
+            
+            for map_file in available_maps:
+                print(f"\n🤖 Modelo: {model_file} | Mapa: {map_file}")
+                print("-" * 60)
+                
+                # Ejecutar simulación en modo headless
+                steps = run_simulation(model_path, map_file, headless=True)
+                
+                # Imprimir progreso simplificado
+                if steps is not None:
+                    print(f"✅ Resuelto en {steps} pasos")
+                else:
+                    print(f"❌ Falló")
+                
+                # Guardar resultado
+                results.append({
+                    'model': model_file,
+                    'map': map_file,
+                    'steps': steps
+                })
+                
+                # Pausa entre simulaciones
+                time.sleep(1)
+        
+        # Crear DataFrame con los resultados
+        results_df = pd.DataFrame(results)
+        
+        # Crear directorio results si no existe
+        os.makedirs("results", exist_ok=True)
+        
+        # Guardar a CSV
+        csv_path = "results/deploy_results.csv"
+        results_df.to_csv(csv_path, index=False)
+        print("\n" + "="*60)
+        print(f"✅ Resultados guardados en: {csv_path}")
+        
+        # Imprimir resumen
+        print("\n📈 RESUMEN DE RESULTADOS")
+        print("="*60)
+        
+        for model_file in model_files:
+            model_results = results_df[results_df['model'] == model_file]
+            solved = model_results[model_results['steps'].notna()]
+            total_maps = len(model_results)
+            solved_count = len(solved)
+            avg_steps = solved['steps'].mean() if len(solved) > 0 else None
+            
+            print(f"\n🤖 {model_file}:")
+            print(f"   Mapas resueltos: {solved_count}/{total_maps}")
+            if avg_steps is not None:
+                print(f"   Promedio de pasos: {avg_steps:.2f}")
+            else:
+                print(f"   Promedio de pasos: N/A")
+        
+        print("\n" + "="*60)
+        print("✅ Ejecución automática completada")
+        print("="*60)
+        
+    else:
+        # --- Seleccionar Modelo ---
+        print("🤖 Modelos disponibles para desplegar:")
+        models_dir = "models"
+        available_models = [f for f in os.listdir(models_dir) if f.endswith(".joblib")]
+        
+        # Filtrar solo los 3 que nos interesan
+        final_models = [m for m in available_models if "original" in m or "rfe" in m or "new_features" in m]
+        
+        if not final_models:
+            print(f"❌ Error: No se encontraron modelos en la carpeta '{models_dir}'")
+            print("Asegúrate de haber ejecutado 'train_final_models.py' del Ejercicio 2.")
+            exit()
 
-    for i, m in enumerate(final_models):
-        print(f"  [{i}] {m}")
-    
-    try:
-        model_idx = int(input("👉 Elige el número del modelo a probar: "))
-        selected_model = os.path.join(models_dir, final_models[model_idx])
-    except Exception as e:
-        print("Selección inválida. Saliendo.")
-        exit()
+        for i, m in enumerate(final_models):
+            print(f"  [{i}] {m}")
+        
+        try:
+            model_idx = int(input("👉 Elige el número del modelo a probar: "))
+            selected_model = os.path.join(models_dir, final_models[model_idx])
+        except Exception as e:
+            print("Selección inválida. Saliendo.")
+            exit()
 
-    # --- Seleccionar Mapa ---
-    print("\n🗺️ Mapas disponibles para probar:")
-    maps_dir = "maps"
-    available_maps = [f for f in os.listdir(maps_dir) if f.endswith(".txt")]
-    for i, m in enumerate(available_maps):
-        print(f"  [{i}] {m}")
+        # --- Seleccionar Mapa ---
+        print("\n🗺️ Mapas disponibles para probar:")
+        maps_dir = "maps"
+        available_maps = [f for f in os.listdir(maps_dir) if f.endswith(".txt")]
+        for i, m in enumerate(available_maps):
+            print(f"  [{i}] {m}")
 
-    try:
-        map_idx = int(input("👉 Elige el número del mapa a probar: "))
-        selected_map = available_maps[map_idx]
-    except Exception as e:
-        print("Selección inválida. Saliendo.")
-        exit()
-    
-    # --- Ejecutar ---
-    print(f"\n🚀 Desplegando {selected_model} en {selected_map}...")
-    print("Cierra la ventana de Pygame para terminar.")
-    time.sleep(2)
-    
-    run_simulation(selected_model, selected_map)
+        try:
+            map_idx = int(input("👉 Elige el número del mapa a probar: "))
+            selected_map = available_maps[map_idx]
+        except Exception as e:
+            print("Selección inválida. Saliendo.")
+            exit()
+        
+        # --- Ejecutar ---
+        print(f"\n🚀 Desplegando {selected_model} en {selected_map}...")
+        print("Cierra la ventana de Pygame para terminar.")
+        time.sleep(2)
+        
+        run_simulation(selected_model, selected_map)

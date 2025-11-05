@@ -2,7 +2,7 @@
 #     registry.py     #
 #######################
 import gymnasium as gym
-from gymnasium.envs.toy_text.taxi import TaxiEnv
+from taxi import TaxiEnv  # 👈 Importar TaxiEnv local en lugar del de gymnasium
 from gymnasium.envs.registration import register
 from map_loader import prepare_for_env
 import numpy as np
